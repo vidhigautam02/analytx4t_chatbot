@@ -10,6 +10,7 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 import requests
 import re
 from bs4 import BeautifulSoup
+from urllib.parse import urljoin, urlparse
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -21,25 +22,108 @@ load_dotenv()
 if not os.getenv('GOOGLE_API_KEY'):
     raise ValueError("GOOGLE_API_KEY environment variable not set")
 
-def scrape_website_content(url):
+
+
+def scrape_website_content(url, depth=2):
     """
-    Scrapes the website content from the given URL.
+    Scrapes the website content from the given URL, extracting all relevant text and data
+    including headings, paragraphs, lists, tables, links, images' alt text, and contact info.
+    Optionally extracts content from linked pages up to a specified depth.
     """
-    print(f"Attempting to scrape content from {url}")
-    try:
-        response = requests.get(url)
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.content, 'html.parser')
-            paragraphs = soup.find_all('p')
-            content = "\n".join([para.get_text() for para in paragraphs])
-            print(f"Successfully scraped content from {url}")
-            return content
-        else:
-            print(f"Failed to retrieve content from {url}. Status code: {response.status_code}")
+    def extract_content_from_soup(soup):
+        # Extract headings (h1 - h6)
+        headings = [heading.get_text(strip=True) for heading in soup.find_all(re.compile('^h[1-6]$'))]
+        heading_text = "\n".join(headings)
+
+        # Extract paragraphs
+        paragraphs = [para.get_text(strip=True) for para in soup.find_all('p')]
+        paragraph_text = "\n".join(paragraphs)
+
+        # Extract list items from unordered and ordered lists
+        list_items = [li.get_text(strip=True) for li in soup.find_all('li')]
+        list_text = "\n".join(list_items)
+
+        # Extract links and their text (anchor tags)
+        links = [(a.get_text(strip=True), a.get('href')) for a in soup.find_all('a', href=True)]
+        link_text = "\n".join([f"Link text: {text}, URL: {href}" for text, href in links])
+
+        # Extract table data (table headers and cells)
+        tables = []
+        for table in soup.find_all('table'):
+            headers = [header.get_text(strip=True) for header in table.find_all('th')]
+            rows = []
+            for row in table.find_all('tr'):
+                rows.append([cell.get_text(strip=True) for cell in row.find_all(['td', 'th'])])
+            tables.append({"headers": headers, "rows": rows})
+
+        table_text = "\n".join(
+            [f"Table {i+1}:\nHeaders: {', '.join(table['headers'])}\nRows:\n" + "\n".join([', '.join(row) for row in table['rows']]) 
+             for i, table in enumerate(tables)]
+        )
+
+        # Extract images' alt text
+        images = [img.get('alt', 'No alt text') for img in soup.find_all('img')]
+        image_text = "\n".join(images)
+
+        # Extract meta descriptions
+        meta_descriptions = [meta.get('content', '') for meta in soup.find_all('meta', {'name': 'description'})]
+        meta_text = "\n".join(meta_descriptions)
+
+        # Extract contact information (emails and phone numbers)
+        contact_info = []
+        emails = re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', soup.get_text())
+        phone_numbers = re.findall(r'\+?\d[\d -]{8,}\d', soup.get_text())
+        contact_info.extend(emails)
+        contact_info.extend(phone_numbers)
+        contact_info_text = "\n".join(contact_info)
+
+        # Combine everything into a single content string
+        content = (
+            f"Headings:\n{heading_text}\n\n"
+            f"Paragraphs:\n{paragraph_text}\n\n"
+            f"Lists:\n{list_text}\n\n"
+            f"Links:\n{link_text}\n\n"
+            f"Tables:\n{table_text}\n\n"
+            f"Images (Alt text):\n{image_text}\n\n"
+            f"Meta Descriptions:\n{meta_text}\n\n"
+            f"Contact Info:\n{contact_info_text}\n"
+        )
+        return content
+
+    def scrape_recursive(url, depth):
+        if depth < 0:
             return ""
-    except Exception as e:
-        print(f"Error occurred while scraping {url}: {e}")
-        return ""
+
+        print(f"Scraping {url} at depth {depth}")
+        content = ""
+
+        try:
+            response = requests.get(url)
+            response.raise_for_status()  # Check for HTTP errors
+            soup = BeautifulSoup(response.content, 'html.parser')
+
+            # Extract content from the current page
+            content += extract_content_from_soup(soup)
+
+            if depth > 0:
+                # Find and scrape linked pages
+                links = set()  # Use a set to avoid duplicate links
+                for a_tag in soup.find_all('a', href=True):
+                    link = a_tag.get('href')
+                    full_url = urljoin(url, link)  # Resolve relative URLs
+                    if full_url.startswith('http') and not full_url.startswith(url):  # Avoid internal links if necessary
+                        links.add(full_url)
+
+                # Recursively scrape linked pages
+                for link in links:
+                    content += "\n\n---\n\n" + scrape_recursive(link, depth - 1)
+
+        except requests.RequestException as e:
+            print(f"Request error while scraping {url}: {e}")
+
+        return content
+
+    return scrape_recursive(url, depth)
 
 def process_website(url):
     """
@@ -73,7 +157,12 @@ def upload_website_data(url):
     else:
         print("No valid website data to process.")
 
+
+    
 def reframe_with_gemini(text,question):
+    print("__________________________________")
+    print(text)
+    print(question)
     # Configure the API key from the environment variable
     genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
     
@@ -91,19 +180,17 @@ def reframe_with_gemini(text,question):
     )
     
     # Prepare the prompt
-    prompt = f"""
-You are a chatbot designed to answer questions using website content. Answer the question directly using the provided website text.
+    prompt = f"""You are a chatbot for an IT company website, tasked with answering user questions based on the provided website text. When responding, please:
 
+Directly Address the Query: Use the website text to provide a clear and relevant answer to the user's question.
+Be Empathetic and Polite: Offer a response in a natural, friendly manner.
+Request More Specificity if Needed: If the query is not fully covered by the website text, gently request more details to provide a precise answer.
+Encourage Further Consultation: If the answer is incomplete or if additional information might be needed, suggest that the user consult more resources for comprehensive details.
+Avoid Irrelevant Information: Do not provide guesses or information not found in the website text.
 User Query: {question}
-Website Text: {text}
 
-Ensure that the response:
-1. Addresses the user's question directly.
-2. Politely suggests more specific queries if the answer isn't found.
-3. Encourages the user to consult more information if needed.
-4. Avoids guessing irrelevant information.
-5.  Do not suggest exploring the website manually or can also find more information on their website., as the main objective is to provide information directly from the available content.
-"""
+Website Text: {text}"""
+
 
     # Generate the response
     try:
@@ -161,7 +248,13 @@ def query(question, chat_history):
     try:
         # Initialize embeddings and vector store
         embeddings = GoogleGenerativeAIEmbeddings(api_key=os.getenv('GOOGLE_API_KEY'), model="models/text-embedding-004")
-        vector_store = FAISS.load_local("faiss_index", embeddings=embeddings, allow_dangerous_deserialization=True)
+        vector_store_path = "faiss_index"
+        
+        # Check if the FAISS index file exists
+        if not os.path.exists(vector_store_path):
+            raise FileNotFoundError(f"FAISS index file not found at path: {vector_store_path}")
+
+        vector_store = FAISS.load_local(vector_store_path, embeddings=embeddings, allow_dangerous_deserialization=True)
 
         # Retrieve the relevant chunks based on the question
         search_results = vector_store.similarity_search(question)
@@ -176,14 +269,16 @@ def query(question, chat_history):
         relevant_info = extract_relevant_information(question, text_chunks, metadata)
 
         # Generate a response using the reframed information
-        formatted_answer = generate_natural_language_response(relevant_info,question) if relevant_info else "I couldn't find a specific answer. Could you please provide more details or ask a different question?"
+        formatted_answer = generate_natural_language_response(relevant_info, question) if relevant_info else "I couldn't find a specific answer. Could you please provide more details or ask a different question?"
 
         return {"answer": formatted_answer}
-    
+
+    except FileNotFoundError as e:
+        logging.error(f"File error: {e}")
+        return {"answer": "The resource could not be found. Please ensure the data has been correctly uploaded."}
     except Exception as e:
         logging.error(f"Error during query: {e}")
         return {"answer": "Oops, something went wrong while processing your query. Please try again later."}
-
 
 
 def show_ui():
@@ -238,6 +333,6 @@ def show_ui():
 if __name__ == "__main__":
     website_url = "https://analytx4t.com/"  # Change to your desired website URL
     print("Starting to upload website data")
-    upload_website_data(website_url)  # Scrape and process the website
+    #upload_website_data(website_url)  # Scrape and process the website
     print("Launching Streamlit UI")
     show_ui()
