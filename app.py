@@ -32,64 +32,83 @@ def scrape_website_content(url, depth=2):
     """
 
     def extract_content_from_soup(soup):
-        # Extract headings (h1 - h6)
-        headings = [heading.get_text(strip=True) for heading in soup.find_all(re.compile('^h[1-6]$'))]
-        heading_text = "\n".join(headings)
+    # Extract headings (h1 - h6)
+    headings = [heading.get_text(strip=True) for heading in soup.find_all(re.compile('^h[1-6]$'))]
+    heading_text = "\n".join(headings)
 
-        # Extract paragraphs
-        paragraphs = [para.get_text(strip=True) for para in soup.find_all('p')]
-        paragraph_text = "\n".join(paragraphs)
+    # Extract paragraphs
+    paragraphs = [para.get_text(strip=True) for para in soup.find_all('p')]
+    paragraph_text = "\n".join(paragraphs)
 
-        # Extract list items from unordered and ordered lists
-        list_items = [li.get_text(strip=True) for li in soup.find_all('li')]
-        list_text = "\n".join(list_items)
+    # Extract list items from unordered and ordered lists
+    list_items = [li.get_text(strip=True) for li in soup.find_all('li')]
+    list_text = "\n".join(list_items)
 
-        # Extract links and their text (anchor tags)
-        links = [(a.get_text(strip=True), a.get('href')) for a in soup.find_all('a', href=True)]
-        link_text = "\n".join([f"Link text: {text}, URL: {href}" for text, href in links])
+    # **Updated**: Extract links and their text or icons (anchor tags)
+    links = []
+    for a_tag in soup.find_all('a', href=True):
+        # Check for text in the <a> tag
+        link_text = a_tag.get_text(strip=True)
+        
+        # If no text, check if it has an image or icon inside
+        if not link_text:
+            # Get the 'alt' attribute of images or icon classes
+            images = a_tag.find_all('img')
+            if images:
+                link_text = ', '.join([img.get('alt', 'Image without alt text') for img in images])
+            else:
+                # If there is an icon (e.g., a <span> or <i> tag for icons)
+                icons = a_tag.find_all(['span', 'i'])
+                if icons:
+                    link_text = 'Icon link'
+        
+        # Append the link with either its text or description
+        links.append((link_text, a_tag.get('href')))
+    
+    link_text = "\n".join([f"Link text: {text or 'No text'}, URL: {href}" for text, href in links])
 
-        # Extract table data (table headers and cells)
-        tables = []
-        for table in soup.find_all('table'):
-            headers = [header.get_text(strip=True) for header in table.find_all('th')]
-            rows = []
-            for row in table.find_all('tr'):
-                rows.append([cell.get_text(strip=True) for cell in row.find_all(['td', 'th'])])
-            tables.append({"headers": headers, "rows": rows})
+    # Extract table data (table headers and cells)
+    tables = []
+    for table in soup.find_all('table'):
+        headers = [header.get_text(strip=True) for header in table.find_all('th')]
+        rows = []
+        for row in table.find_all('tr'):
+            rows.append([cell.get_text(strip=True) for cell in row.find_all(['td', 'th'])])
+        tables.append({"headers": headers, "rows": rows})
 
-        table_text = "\n".join(
-            [f"Table {i+1}:\nHeaders: {', '.join(table['headers'])}\nRows:\n" + "\n".join([', '.join(row) for row in table['rows']]) 
-             for i, table in enumerate(tables)]
-        )
+    table_text = "\n".join(
+        [f"Table {i+1}:\nHeaders: {', '.join(table['headers'])}\nRows:\n" + "\n".join([', '.join(row) for row in table['rows']]) 
+         for i, table in enumerate(tables)]
+    )
 
-        # Extract meta descriptions
-        meta_descriptions = [meta.get('content', '') for meta in soup.find_all('meta', {'name': 'description'})]
-        meta_text = "\n".join(meta_descriptions)
+    # Extract meta descriptions
+    meta_descriptions = [meta.get('content', '') for meta in soup.find_all('meta', {'name': 'description'})]
+    meta_text = "\n".join(meta_descriptions)
 
-        # Extract contact information (emails and phone numbers)
-        contact_info = []
-        emails = re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', soup.get_text())
-        phone_numbers = re.findall(r'\+?\d[\d -]{8,}\d', soup.get_text())
-        contact_info.extend(emails)
-        contact_info.extend(phone_numbers)
-        contact_info_text = "\n".join(contact_info)
+    # Extract contact information (emails and phone numbers)
+    contact_info = []
+    emails = re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', soup.get_text())
+    phone_numbers = re.findall(r'\+?\d[\d -]{8,}\d', soup.get_text())
+    contact_info.extend(emails)
+    contact_info.extend(phone_numbers)
+    contact_info_text = "\n".join(contact_info)
 
-        # Extract alt text from images
-        image_alts = [img.get('alt', '').strip() for img in soup.find_all('img') if img.get('alt')]
-        image_alt_text = "\n".join(image_alts)
+    # Extract alt text from images
+    image_alts = [img.get('alt', '').strip() for img in soup.find_all('img') if img.get('alt')]
+    image_alt_text = "\n".join(image_alts)
 
-        # Combine everything into a single content string
-        content = (
-            f"Headings:\n{heading_text}\n\n"
-            f"Paragraphs:\n{paragraph_text}\n\n"
-            f"Lists:\n{list_text}\n\n"
-            f"Links:\n{link_text}\n\n"
-            f"Tables:\n{table_text}\n\n"
-            f"Meta Descriptions:\n{meta_text}\n\n"
-            f"Contact Info:\n{contact_info_text}\n\n"
-            f"Image Alt Text:\n{image_alt_text}\n"
-        )
-        return content
+    # Combine everything into a single content string
+    content = (
+        f"Headings:\n{heading_text}\n\n"
+        f"Paragraphs:\n{paragraph_text}\n\n"
+        f"Lists:\n{list_text}\n\n"
+        f"Links:\n{link_text}\n\n"
+        f"Tables:\n{table_text}\n\n"
+        f"Meta Descriptions:\n{meta_text}\n\n"
+        f"Contact Info:\n{contact_info_text}\n\n"
+        f"Image Alt Text:\n{image_alt_text}\n"
+    )
+    return content
 
     def scrape_recursive(url, depth):
         if depth < 0:
