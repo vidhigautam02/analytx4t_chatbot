@@ -11,6 +11,7 @@ import requests
 import re
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
+import pytesseract
 from PIL import Image
 from io import BytesIO
 
@@ -74,6 +75,7 @@ def scrape_website_content(url, depth=2):
                 img_response = requests.get(img_url)
                 img_response.raise_for_status()
                 img_content = Image.open(BytesIO(img_response.content))
+                ocr_text = pytesseract.image_to_string(img_content)
             except Exception as e:
                 ocr_text = f"Error processing image: {e}"
             
@@ -205,7 +207,7 @@ def reframe_with_gemini(text,question):
 4. Encourage Further Consultation: If the answer is incomplete or if additional information might be needed, suggest that the user consult more resources for comprehensive details.
 5. Avoid Irrelevant Information: Do not provide guesses or information not found in the website text. 
 6. always provide the link of the related information not the company website link
-7. always involve extracted data and link from image if required
+7. always involve extracted data and link from image if required according to user query
 
 User Query: {question}
 
