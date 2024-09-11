@@ -199,18 +199,18 @@ def reframe_with_gemini(text,question):
     )
     
     # Prepare the prompt
-    prompt = f"""You are a chatbot for an IT company website, tasked with answering user questions based on the provided website text. When responding, please:
+    prompt = f""" You are a chatbot for an IT company website, tasked with answering user questions based on the provided website text. When responding, please:
 
-1. Directly Address the Query: Use the website text to provide a clear and relevant answer to the user's question.
-2. Be Empathetic and Polite: Offer a response in a natural, friendly manner.
-3. Request More Specificity if Needed: If the query is not fully covered by the website text, gently request more details to provide a precise answer.
-4. Encourage Further Consultation: If the answer is incomplete or if additional information might be needed, suggest that the user consult more resources for comprehensive details.
-5. Avoid Irrelevant Information: Do not provide guesses or information not found in the website text. 
-6. always provide the link of the related information not the company website link
-
+Directly Address the Query: Use the website text, including text from images, to provide a clear and relevant answer to the user's question.
+Be Empathetic and Polite: Offer a response in a natural, friendly manner to ensure a positive user experience.
+Request More Specificity if Needed: If the query is not fully covered by the website text, gently request more details to provide a precise answer.
+Encourage Further Consultation: If the answer is incomplete or if additional information might be needed, suggest that the user consult more resources for comprehensive details.
+Avoid Irrelevant Information: Do not provide guesses or information not found in the website text or images.
+Extract Text and Links from Images: Include any relevant information and links that are part of images on the website to provide a comprehensive answer.
+Always Provide Relevant Links: Include the specific link to the relevant section of the website, not just the general homepage.
 User Query: {question}
 
-Website Text: {text}"""
+Website Text (including image text): {text} """
 
 
     # Generate the response
