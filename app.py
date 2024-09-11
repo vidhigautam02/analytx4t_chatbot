@@ -1,5 +1,6 @@
 import os
 import logging
+import json
 from dotenv import load_dotenv
 import streamlit as st
 from langchain.text_splitter import RecursiveCharacterTextSplitter
