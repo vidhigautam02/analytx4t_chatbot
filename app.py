@@ -329,6 +329,14 @@ def show_ui():
         # Reset the chat state
         st.session_state.messages = []
         st.session_state.chat_history = []
+                            # Continue displaying the assistant's response
+        st.markdown(f"{response.get('answer')}")
+        st.session_state.chat_history.append({"user": prompt, "assistant": response.get('answer')})
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        st.session_state.messages.append({"role": "assistant", "content": response.get('answer')})
+
+        except Exception as e:
+            st.error(f"An error occurred: {e}")
 
 
 
