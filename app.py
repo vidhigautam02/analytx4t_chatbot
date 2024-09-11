@@ -179,9 +179,6 @@ def upload_website_data(url):
 
     
 def reframe_with_gemini(text,question):
-    print("__________________________________")
-    print(text)
-    print(question)
     # Configure the API key from the environment variable
     genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
     
@@ -352,7 +349,7 @@ def show_ui():
 
 if __name__ == "__main__":
     website_url = "https://analytx4t.com/"  # Change to your desired website URL
-    print("Starting to upload website data")
-    upload_website_data(website_url)  # Scrape and process the website
-    print("Launching Streamlit UI")
+    #print("Starting to upload website data")
+    #upload_website_data(website_url)  # Scrape and process the website
+    #print("Launching Streamlit UI")
     show_ui()
