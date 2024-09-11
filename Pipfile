@@ -16,6 +16,7 @@ requests = "2.32.3"
 python-dotenv = "1.0.1"
 faiss-cpu = "1.8.0.post1"  
 altair= "5.4.1"
+pytesseract = "0.3.13"
 
 [dev-packages]
 
