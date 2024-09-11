@@ -11,6 +11,9 @@ import requests
 import re
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
+import pytesseract
+from PIL import Image
+from io import BytesIO
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -26,10 +29,10 @@ if not os.getenv('GOOGLE_API_KEY'):
 
 def scrape_website_content(url, depth=2):
     """
-    Scrapes the website content from the given URL, extracting all relevant text and data
-    including headings, paragraphs, lists, tables, links, images' alt text, and contact info.
+    Scrapes the website content from the given URL, including extracting text, image info, and links.
     Optionally extracts content from linked pages up to a specified depth.
     """
+
     def extract_content_from_soup(soup):
         # Extract headings (h1 - h6)
         headings = [heading.get_text(strip=True) for heading in soup.find_all(re.compile('^h[1-6]$'))]
@@ -61,9 +64,24 @@ def scrape_website_content(url, depth=2):
              for i, table in enumerate(tables)]
         )
 
-        # Extract images' alt text
-        images = [img.get('alt', 'No alt text') for img in soup.find_all('img')]
-        image_text = "\n".join(images)
+        # Extract images' alt text and OCR from images
+        images = []
+        for img in soup.find_all('img'):
+            img_url = urljoin(url, img.get('src'))
+            alt_text = img.get('alt', 'No alt text')
+            
+            # Extract image content via OCR if the image is downloadable
+            try:
+                img_response = requests.get(img_url)
+                img_response.raise_for_status()
+                img_content = Image.open(BytesIO(img_response.content))
+                ocr_text = pytesseract.image_to_string(img_content)
+            except Exception as e:
+                ocr_text = f"Error processing image: {e}"
+            
+            images.append({"alt": alt_text, "ocr_text": ocr_text, "url": img_url})
+        
+        image_text = "\n".join([f"Alt: {img['alt']}, OCR: {img['ocr_text']}, URL: {img['url']}" for img in images])
 
         # Extract meta descriptions
         meta_descriptions = [meta.get('content', '') for meta in soup.find_all('meta', {'name': 'description'})]
@@ -84,7 +102,7 @@ def scrape_website_content(url, depth=2):
             f"Lists:\n{list_text}\n\n"
             f"Links:\n{link_text}\n\n"
             f"Tables:\n{table_text}\n\n"
-            f"Images (Alt text):\n{image_text}\n\n"
+            f"Images (Alt text and OCR):\n{image_text}\n\n"
             f"Meta Descriptions:\n{meta_text}\n\n"
             f"Contact Info:\n{contact_info_text}\n"
         )
@@ -120,7 +138,7 @@ def scrape_website_content(url, depth=2):
 
         except requests.RequestException as e:
             print(f"Request error while scraping {url}: {e}")
-
+ 
         return content
 
     return scrape_recursive(url, depth)
@@ -158,6 +176,7 @@ def upload_website_data(url):
         print("No valid website data to process.")
 
 
+
     
 def reframe_with_gemini(text,question):
     print("__________________________________")
@@ -182,11 +201,14 @@ def reframe_with_gemini(text,question):
     # Prepare the prompt
     prompt = f"""You are a chatbot for an IT company website, tasked with answering user questions based on the provided website text. When responding, please:
 
-Directly Address the Query: Use the website text to provide a clear and relevant answer to the user's question.
-Be Empathetic and Polite: Offer a response in a natural, friendly manner.
-Request More Specificity if Needed: If the query is not fully covered by the website text, gently request more details to provide a precise answer.
-Encourage Further Consultation: If the answer is incomplete or if additional information might be needed, suggest that the user consult more resources for comprehensive details.
-Avoid Irrelevant Information: Do not provide guesses or information not found in the website text.
+1. Directly Address the Query: Use the website text to provide a clear and relevant answer to the user's question.
+2. Be Empathetic and Polite: Offer a response in a natural, friendly manner.
+3. Request More Specificity if Needed: If the query is not fully covered by the website text, gently request more details to provide a precise answer.
+4. Encourage Further Consultation: If the answer is incomplete or if additional information might be needed, suggest that the user consult more resources for comprehensive details.
+5. Avoid Irrelevant Information: Do not provide guesses or information not found in the website text. 
+6. always provide the link of the related information not the company website link
+7. always involve extracted data and link from image if required
+
 User Query: {question}
 
 Website Text: {text}"""
@@ -279,7 +301,6 @@ def query(question, chat_history):
     except Exception as e:
         logging.error(f"Error during query: {e}")
         return {"answer": "Oops, something went wrong while processing your query. Please try again later."}
-
 
 def show_ui():
     """
