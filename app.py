@@ -205,6 +205,9 @@ def reframe_with_gemini(text,question):
 5. Avoid Irrelevant Information: Do not provide guesses or information not found in the website text. 
 6. always provide the link of the related information not the company website link
 7. add the required information from the images and links 
+User Query: {question}
+
+Website Text: {text}
 """
 
 
