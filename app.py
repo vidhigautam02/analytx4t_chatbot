@@ -27,30 +27,29 @@ if not os.getenv('GOOGLE_API_KEY'):
 
 
 
-def scrape_website_content(url, depth=2):
-    """
-    Scrapes the website content from the given URL, including extracting text, image info, and links.
-    Optionally extracts content from linked pages up to a specified depth.
-    """
+with open("ocr_data.json", "r") as f:
+    ocr_data = json.load(f)
 
+def get_ocr_from_preprocessed_data(image_url):
+    for img_data in ocr_data:
+        if img_data["image_url"] == image_url:
+            return img_data["ocr_text"]
+    return "No OCR data found for this image"
+
+def scrape_website_content(url, depth=2):
     def extract_content_from_soup(soup):
-        # Extract headings (h1 - h6)
         headings = [heading.get_text(strip=True) for heading in soup.find_all(re.compile('^h[1-6]$'))]
         heading_text = "\n".join(headings)
 
-        # Extract paragraphs
         paragraphs = [para.get_text(strip=True) for para in soup.find_all('p')]
         paragraph_text = "\n".join(paragraphs)
 
-        # Extract list items from unordered and ordered lists
         list_items = [li.get_text(strip=True) for li in soup.find_all('li')]
         list_text = "\n".join(list_items)
 
-        # Extract links and their text (anchor tags)
         links = [(a.get_text(strip=True), a.get('href')) for a in soup.find_all('a', href=True)]
         link_text = "\n".join([f"Link text: {text}, URL: {href}" for text, href in links])
 
-        # Extract table data (table headers and cells)
         tables = []
         for table in soup.find_all('table'):
             headers = [header.get_text(strip=True) for header in table.find_all('th')]
@@ -64,30 +63,20 @@ def scrape_website_content(url, depth=2):
              for i, table in enumerate(tables)]
         )
 
-        # Extract images' alt text and OCR from images
         images = []
         for img in soup.find_all('img'):
             img_url = urljoin(url, img.get('src'))
             alt_text = img.get('alt', 'No alt text')
-            
-            # Extract image content via OCR if the image is downloadable
-            try:
-                img_response = requests.get(img_url)
-                img_response.raise_for_status()
-                img_content = Image.open(BytesIO(img_response.content))
-                ocr_text = pytesseract.image_to_string(img_content)
-            except Exception as e:
-                ocr_text = f"Error processing image: {e}"
+
+            ocr_text = get_ocr_from_preprocessed_data(img_url)
             
             images.append({"alt": alt_text, "ocr_text": ocr_text, "url": img_url})
-        
+
         image_text = "\n".join([f"Alt: {img['alt']}, OCR: {img['ocr_text']}, URL: {img['url']}" for img in images])
 
-        # Extract meta descriptions
         meta_descriptions = [meta.get('content', '') for meta in soup.find_all('meta', {'name': 'description'})]
         meta_text = "\n".join(meta_descriptions)
 
-        # Extract contact information (emails and phone numbers)
         contact_info = []
         emails = re.findall(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}', soup.get_text())
         phone_numbers = re.findall(r'\+?\d[\d -]{8,}\d', soup.get_text())
@@ -95,7 +84,6 @@ def scrape_website_content(url, depth=2):
         contact_info.extend(phone_numbers)
         contact_info_text = "\n".join(contact_info)
 
-        # Combine everything into a single content string
         content = (
             f"Headings:\n{heading_text}\n\n"
             f"Paragraphs:\n{paragraph_text}\n\n"
@@ -117,22 +105,19 @@ def scrape_website_content(url, depth=2):
 
         try:
             response = requests.get(url)
-            response.raise_for_status()  # Check for HTTP errors
+            response.raise_for_status()
             soup = BeautifulSoup(response.content, 'html.parser')
 
-            # Extract content from the current page
             content += extract_content_from_soup(soup)
 
             if depth > 0:
-                # Find and scrape linked pages
-                links = set()  # Use a set to avoid duplicate links
+                links = set()
                 for a_tag in soup.find_all('a', href=True):
                     link = a_tag.get('href')
-                    full_url = urljoin(url, link)  # Resolve relative URLs
-                    if full_url.startswith('http') and not full_url.startswith(url):  # Avoid internal links if necessary
+                    full_url = urljoin(url, link)
+                    if full_url.startswith('http') and not full_url.startswith(url):
                         links.add(full_url)
 
-                # Recursively scrape linked pages
                 for link in links:
                     content += "\n\n---\n\n" + scrape_recursive(link, depth - 1)
 
@@ -144,14 +129,9 @@ def scrape_website_content(url, depth=2):
     return scrape_recursive(url, depth)
 
 def process_website(url):
-    """
-    Processes the website: scrapes text, splits it into chunks,
-    and converts chunks into embeddings.
-    """
     print(f"Processing website: {url}")
     text = scrape_website_content(url)
 
-    # Split text into manageable chunks
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     chunks = text_splitter.split_text(text)
     print(f"Text split into {len(chunks)} chunks")
@@ -160,9 +140,6 @@ def process_website(url):
     return chunks_with_sources
 
 def upload_website_data(url):
-    """
-    Scrapes the website, processes the content, and saves it into a FAISS vector store.
-    """
     print(f"Uploading website data for {url}")
     chunks_with_sources = process_website(url)
     if chunks_with_sources:
@@ -174,7 +151,6 @@ def upload_website_data(url):
         print("FAISS index created or updated successfully.")
     else:
         print("No valid website data to process.")
-
 
 
     
