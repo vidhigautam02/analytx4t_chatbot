@@ -207,7 +207,6 @@ def reframe_with_gemini(text,question):
 4. Encourage Further Consultation: If the answer is incomplete or if additional information might be needed, suggest that the user consult more resources for comprehensive details.
 5. Avoid Irrelevant Information: Do not provide guesses or information not found in the website text. 
 6. always provide the link of the related information not the company website link
-7. include the information extracted from the images
 
 User Query: {question}
 
@@ -354,6 +353,6 @@ def show_ui():
 if __name__ == "__main__":
     website_url = "https://analytx4t.com/"  # Change to your desired website URL
     print("Starting to upload website data")
-    #upload_website_data(website_url)  # Scrape and process the website
+    upload_website_data(website_url)  # Scrape and process the website
     print("Launching Streamlit UI")
     show_ui()
