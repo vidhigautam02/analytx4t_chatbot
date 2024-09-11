@@ -11,9 +11,7 @@ import requests
 import re
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
-import pytesseract
-from PIL import Image
-from io import BytesIO
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -64,25 +62,6 @@ def scrape_website_content(url, depth=2):
              for i, table in enumerate(tables)]
         )
 
-        # Extract images' alt text and OCR from images
-        images = []
-        for img in soup.find_all('img'):
-            img_url = urljoin(url, img.get('src'))
-            alt_text = img.get('alt', 'No alt text')
-            
-            # Extract image content via OCR if the image is downloadable
-            try:
-                img_response = requests.get(img_url)
-                img_response.raise_for_status()
-                img_content = Image.open(BytesIO(img_response.content))
-                ocr_text = pytesseract.image_to_string(img_content)
-            except Exception as e:
-                ocr_text = f"Error processing image: {e}"
-            
-            images.append({"alt": alt_text, "ocr_text": ocr_text, "url": img_url})
-        
-        image_text = "\n".join([f"Alt: {img['alt']}, OCR: {img['ocr_text']}, URL: {img['url']}" for img in images])
-
         # Extract meta descriptions
         meta_descriptions = [meta.get('content', '') for meta in soup.find_all('meta', {'name': 'description'})]
         meta_text = "\n".join(meta_descriptions)
@@ -95,6 +74,10 @@ def scrape_website_content(url, depth=2):
         contact_info.extend(phone_numbers)
         contact_info_text = "\n".join(contact_info)
 
+        # Extract alt text from images
+        image_alts = [img.get('alt', '').strip() for img in soup.find_all('img') if img.get('alt')]
+        image_alt_text = "\n".join(image_alts)
+
         # Combine everything into a single content string
         content = (
             f"Headings:\n{heading_text}\n\n"
@@ -102,9 +85,9 @@ def scrape_website_content(url, depth=2):
             f"Lists:\n{list_text}\n\n"
             f"Links:\n{link_text}\n\n"
             f"Tables:\n{table_text}\n\n"
-            f"Images (Alt text and OCR):\n{image_text}\n\n"
             f"Meta Descriptions:\n{meta_text}\n\n"
-            f"Contact Info:\n{contact_info_text}\n"
+            f"Contact Info:\n{contact_info_text}\n\n"
+            f"Image Alt Text:\n{image_alt_text}\n"
         )
         return content
 
@@ -142,6 +125,7 @@ def scrape_website_content(url, depth=2):
         return content
 
     return scrape_recursive(url, depth)
+
 
 def process_website(url):
     """
